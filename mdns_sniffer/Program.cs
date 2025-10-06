@@ -10,8 +10,22 @@ namespace MdnsSniffer
 {
     class Program
     {
-        static async Task Main()
+        static async Task Main(string[] args)
         {
+
+            if (args.Length < 1)
+            {
+                Console.WriteLine("Usage: mdns_responder <advertise-ip>");
+                return;
+            }
+
+            if (!IPAddress.TryParse(args[0], out var advertisedAddress))
+            {
+                Console.WriteLine($"Invalid IP: {args[0]}");
+                return;
+            }
+
+            Console.WriteLine($"Advertising IP: {advertisedAddress}");
             const int MdnsPort = 5353;
             var multicastAddress = IPAddress.Parse("224.0.0.251");
 
@@ -41,7 +55,6 @@ namespace MdnsSniffer
                         // Try to parse the packet as a DNS message.
                         int offset = 12;
                         string name = ReadNameSimple(buf, ref offset);
-                        var advertisedAddress = IPAddress.Parse("192.168.1.9");  // the IPv4 you want to advertise
                         //Console.WriteLine($"Name: {name}");
                         byte[] response = BuildMdnsAResponse(name, advertisedAddress);
                         if (name.Contains("wpad", StringComparison.OrdinalIgnoreCase))
@@ -50,8 +63,6 @@ namespace MdnsSniffer
 
                             var sent = await udp.SendAsync(response, response.Length, remote);
                             Console.WriteLine($"Sent {sent} bytes to {remote}");
-
-
 
                         }
 
@@ -117,7 +128,6 @@ namespace MdnsSniffer
                 {
                     Console.WriteLine($"WPAD traffic found from: {remote.Address}");
                     
-
                 }
 
 
@@ -214,13 +224,8 @@ namespace MdnsSniffer
             return string.Join('.', parts);
         }
 
-
-
         // to parse DNS header
         private static ushort ReadUInt16(byte[] b, int i) => (ushort)((b[i] << 8) | b[i + 1]);
-
-
-
 
     }
 }
