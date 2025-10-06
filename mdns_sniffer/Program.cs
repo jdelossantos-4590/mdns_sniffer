@@ -155,7 +155,7 @@ namespace MdnsSniffer
             ushort ar = 0;
 
             void W16(ushort v) { bytes.Add((byte)(v >> 8)); bytes.Add((byte)(v & 0xFF)); }
-
+            //Build mDNS header
             W16(id);
             W16(flags);
             W16(qd);
