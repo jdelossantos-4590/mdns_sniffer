@@ -13,9 +13,9 @@ namespace MdnsSniffer
         static async Task Main(string[] args)
         {
 
-            if (args.Length < 1)
+            if (args.Length < 2)
             {
-                Console.WriteLine("Usage: mdns_responder <advertise-ip>");
+                Console.WriteLine("Usage: mdns_responder <advertise-ip> <bind-ip>");
                 return;
             }
 
@@ -24,6 +24,14 @@ namespace MdnsSniffer
                 Console.WriteLine($"Invalid IP: {args[0]}");
                 return;
             }
+
+            if (!IPAddress.TryParse(args[1], out var bindAddress))
+            {
+                Console.WriteLine($"Invalid IP: {args[1]}");
+                return;
+            }
+
+
 
             Console.WriteLine($"Advertising IP: {advertisedAddress}");
             const int MdnsPort = 5353;
@@ -35,10 +43,11 @@ namespace MdnsSniffer
             udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             try { udp.Client.ExclusiveAddressUse = false; } catch { /* ignore on platforms that disallow */ };
 
-            udp.Client.Bind(new IPEndPoint(IPAddress.Any, MdnsPort));
+            udp.Client.Bind(new IPEndPoint(bindAddress, MdnsPort));
 
             udp.JoinMulticastGroup(multicastAddress);
 
+            Console.WriteLine($"Binding on {bindAddress}");
             Console.WriteLine("Listening for mDNS queries on 224.0.0.251:5353 ... (Ctrl+C to quit)\n");
 
             while (true)
@@ -57,12 +66,14 @@ namespace MdnsSniffer
                         string name = ReadNameSimple(buf, ref offset);
                         //Console.WriteLine($"Name: {name}");
                         byte[] response = BuildMdnsAResponse(name, advertisedAddress);
-                        if (name.Contains("wpad", StringComparison.OrdinalIgnoreCase))
+                        ushort ancount = ReadUInt16(buf, 6);
+                        bool isAnswer = ancount > 0;
+
+                        if (name.Contains("wpad", StringComparison.OrdinalIgnoreCase) && isAnswer)
                         {
-                            Console.WriteLine($"WPAD Traffic found! Responding...");
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] WPAD Traffic found from {remote.Address}! Sending Response...");
 
                             var sent = await udp.SendAsync(response, response.Length, remote);
-                            Console.WriteLine($"Sent {sent} bytes to {remote}");
 
                         }
 
@@ -169,7 +180,7 @@ namespace MdnsSniffer
 
             // TYPE = A (1), CLASS = IN (1) with cache-flush bit set (0x8000)
             W16(1);                   // TYPE A
-            W16((ushort)(0x8000 | 1));// CLASS IN with cache-flush
+            W16(1);// CLASS IN with no cache flush
 
             // TTL: typical mDNS TTL for address records is 120 seconds
             bytes.Add(0); bytes.Add(0); bytes.Add(0); bytes.Add(120);
