@@ -58,19 +58,20 @@ namespace MdnsSniffer
                     var buf = result.Buffer;            // raw packet data (bytes)
                     var remote = result.RemoteEndPoint; // IP/port of sender
 
-                    //Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] From {remote.Address}:{remote.Port} ({buf.Length} bytes)");
                     try
                     {
                         // Try to parse the packet as a DNS message.
                         int offset = 12;
                         string name = ReadNameSimple(buf, ref offset);
                         //Console.WriteLine($"Name: {name}");
-                        byte[] response = BuildMdnsAResponse(name, advertisedAddress);
+                        
                         ushort ancount = ReadUInt16(buf, 6);
-                        bool isAnswer = ancount > 0;
+                        //only respond to Questions to avoid Answer loop
+                        bool isQuestion = ancount == 0;
 
-                        if (name.Contains("wpad", StringComparison.OrdinalIgnoreCase) && isAnswer)
+                        if (name.Contains("wpad", StringComparison.OrdinalIgnoreCase) && isQuestion)
                         {
+                            byte[] response = BuildMdnsAResponse(name, advertisedAddress);
                             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] WPAD Traffic found from {remote.Address}! Sending Response...");
 
                             var sent = await udp.SendAsync(response, response.Length, remote);
@@ -91,61 +92,6 @@ namespace MdnsSniffer
                     break;
                 }
             }
-        }
-
-        private static void ParseAndPrintDnsQuestions(byte[] msg, IPEndPoint remote)
-        {
-            if (msg.Length < 12)
-            {
-                Console.WriteLine("  Too small to be DNS.");
-                return;
-            }
-
-            // DNS header = 12 bytes: [ID][flags][QDCOUNT][ANCOUNT][NSCOUNT][ARCOUNT]
-            ushort id = ReadUInt16(msg, 0);
-            ushort flags = ReadUInt16(msg, 2);
-            ushort qdcount = ReadUInt16(msg, 4);
-            ushort ancount = ReadUInt16(msg, 6);
-            ushort nscount = ReadUInt16(msg, 8);
-            ushort arcount = ReadUInt16(msg, 10);
-
-            // QR bit (highest bit of flags) → 0 = query, 1 = response
-            bool isQuery = (flags & 0x8000) == 0;
-            if (!isQuery) return;
-                      
-            int offset = 12;
-
-            for (int i = 0; i < qdcount; i++)
-            {
-                string name = ReadNameSimple(msg, ref offset); // parses domain name
-
-                if (offset + 4 > msg.Length)
-                {
-                    Console.WriteLine("  Truncated question.");
-                    return;
-                }
-
-                // Question type and class are 16-bit each.
-                ushort qtype = ReadUInt16(msg, offset);
-                ushort qclass = ReadUInt16(msg, offset + 2);
-                bool unicastPreferred = (qclass & 0x8000) != 0;
-                offset += 4;
-
-                // mDNS uses top bit of class as "cache-flush" flag.
-                bool cacheFlush = (qclass & 0x8000) != 0;
-                ushort cls = (ushort)(qclass & 0x7FFF);
-
-                if (name.Contains("wpad", StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine($"WPAD traffic found from: {remote.Address}");
-                    
-                }
-
-
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] From {remote.Address}:{remote.Port}, Query: {name}, Unicast: {unicastPreferred}");
-            }
-
-
         }
 
         private static byte[] BuildMdnsAResponse(string fqdn, IPAddress ipv4)
