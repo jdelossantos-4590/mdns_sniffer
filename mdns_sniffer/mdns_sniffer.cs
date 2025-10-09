@@ -38,9 +38,9 @@ public class MdnsSniffer
 
             Console.WriteLine($"Advertising IP: {_advertisedAddress}");
             Console.WriteLine($"Binding on {_bindAddress}");
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Listening for {_duration}s for mDNS queries on 224.0.0.251:5353 ... (Ctrl+C to quit)\n");
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Listening for {_duration}m for mDNS queries on 224.0.0.251:5353 ... (Ctrl+C to quit)\n");
             
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_duration));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(_duration));
 
         while (!cts.Token.IsCancellationRequested)
             {
