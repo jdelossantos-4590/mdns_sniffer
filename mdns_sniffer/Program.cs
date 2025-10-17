@@ -1,14 +1,7 @@
-﻿using System;
-using System;
-using System.Collections.Generic;
-using System.CommandLine;
-using System.CommandLine.Invocation;
+﻿using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
+
 
 namespace Responder
 {
@@ -19,7 +12,7 @@ namespace Responder
 
             Option<string> advertisedAddressArg = new("--advertise")
             {
-                Description = "IP address to advertise in response to mDNS traffic."
+                Description = "IP address to advertise in response to mDNS/LLMNR traffic."
             };
             advertisedAddressArg.Aliases.Add("-a");
             advertisedAddressArg.Required = true;
@@ -40,7 +33,7 @@ namespace Responder
             };
             durationArg.Aliases.Add("-d");
 
-            var root = new RootCommand("mDNS responder");
+            var root = new RootCommand("WPAD Responder");
 
             root.Options.Add(advertisedAddressArg);
             root.Options.Add(bindAddressArg);
@@ -73,8 +66,16 @@ namespace Responder
                     return;
                 }
 
-                var sniffer = new MdnsSniffer(advertisedAddress, bindAddress, duration);
-                await sniffer.RunAsync();
+                Console.WriteLine($"Starting WPAD Responder: Bind={bindAddress}, Advertise={advertisedAddress}, Duration={duration}m");
+
+                var mdnsSniffer = new MdnsSniffer(advertisedAddress, bindAddress, duration);
+                var llmnrSniffer = new LLMNRSniffer(advertisedAddress, bindAddress, duration);
+                await Task.WhenAll(
+                    mdnsSniffer.RunAsync()
+                    //llmnrSniffer.RunAsync()
+                );
+                
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Closing Bind Port and Terminating program.");
 
             }
 
