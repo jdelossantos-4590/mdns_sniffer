@@ -71,8 +71,8 @@ namespace Responder
                 var mdnsSniffer = new MdnsSniffer(advertisedAddress, bindAddress, duration);
                 var llmnrSniffer = new LLMNRSniffer(advertisedAddress, bindAddress, duration);
                 await Task.WhenAll(
-                    mdnsSniffer.RunAsync()
-                    //llmnrSniffer.RunAsync()
+                    mdnsSniffer.RunAsync(),
+                    llmnrSniffer.RunAsync()
                 );
                 
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Closing Bind Port and Terminating program.");
