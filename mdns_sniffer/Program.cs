@@ -1,83 +1,85 @@
-﻿using System.CommandLine;
-using System.CommandLine.Parsing;
+﻿using System;
+using System.IO;
 using System.Net;
+using System.Threading.Tasks;
+using CommandLine;
 
-
-namespace Responder
+namespace WPADResponder
 {
-    class Program
+    // Define CLI options
+    public class Options
     {
-        static async Task Main(string[] args)
+        [Option('a', "advertise", Required = true, HelpText = "IPv4 address to advertise in responses (e.g., 192.168.1.10).")]
+        public string Advertise { get; set; }
+
+        [Option('b', "bind", Required = false, Default = "0.0.0.0", HelpText = "Local IPv4 address to bind (default: 0.0.0.0).")]
+        public string Bind { get; set; }
+
+        [Option('d', "duration", Required = false, Default = 60, HelpText = "Listening duration in minutes (default: 60).")]
+        public int Duration { get; set; }
+    }
+
+    internal static class Program
+    {
+        private static int Main(string[] args)
         {
-
-            Option<string> advertisedAddressArg = new("--advertise")
-            {
-                Description = "IP address to advertise in response to mDNS/LLMNR traffic."
-            };
-            advertisedAddressArg.Aliases.Add("-a");
-            advertisedAddressArg.Required = true;
-
-            Option<string> bindAddressArg = new("--bind")
-            {
-                Description = "Local address to bind to.",
-                DefaultValueFactory = ParseResult=> "0.0.0.0",
-
-            };
-            bindAddressArg.Aliases.Add("-b");
-
-            Option<int> durationArg = new("--duration")
-            {
-                Description = "Time in Minutes to listen for traffic.",
-                DefaultValueFactory = ParseResult => 60,
-
-            };
-            durationArg.Aliases.Add("-d");
-
-            var root = new RootCommand("WPAD Responder");
-
-            root.Options.Add(advertisedAddressArg);
-            root.Options.Add(bindAddressArg);
-            root.Options.Add(durationArg);
-
-            var parseResult = root.Parse(args);
-            if (parseResult.Errors.Count > 0)
-            {
-                foreach (ParseError parseError in parseResult.Errors)
-                {
-                    Console.Error.WriteLine(parseError.Message);
-                }
-                root.Parse("-h").Invoke();
-                return;
-            }
-
-            var advertisedAddressString = parseResult.GetValue<string>("--advertise");
-            var bindAddressString = parseResult.GetValue<string>("--bind");
-            int duration = parseResult.GetValue<int>("--duration");
-
-                if (!IPAddress.TryParse(advertisedAddressString, out var advertisedAddress))
-                {
-                    Console.WriteLine($"Invalid Advertisement IP: {advertisedAddressString}");
-                    return;
-                }
-
-                if (!IPAddress.TryParse(bindAddressString, out var bindAddress))
-                {
-                    Console.WriteLine($"Invalid Bind IP: {bindAddressString}");
-                    return;
-                }
-
-                Console.WriteLine($"Starting WPAD Responder: Bind={bindAddress}, Advertise={advertisedAddress}, Duration={duration}m");
-
-                var mdnsSniffer = new MdnsSniffer(advertisedAddress, bindAddress, duration);
-                var llmnrSniffer = new LLMNRSniffer(advertisedAddress, bindAddress, duration);
-                await Task.WhenAll(
-                    mdnsSniffer.RunAsync(),
-                    llmnrSniffer.RunAsync()
+            return Parser.Default.ParseArguments<Options>(args)
+                .MapResult(
+                    (Options opts) => Run(opts),
+                    errs => 1
                 );
-                
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Closing Bind Port and Terminating program.");
+        }
 
+        private static int Run(Options opts)
+        {
+            // Validate IPs
+            if (!IPAddress.TryParse(opts.Advertise, out var advertised))
+            {
+                Console.Error.WriteLine($"Invalid --advertise IP: {opts.Advertise}");
+                return 1;
+            }
+            if (!IPAddress.TryParse(opts.Bind, out var bind))
+            {
+                Console.Error.WriteLine($"Invalid --bind IP: {opts.Bind}");
+                return 1;
+            }
+            if (advertised.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork ||
+                bind.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                Console.Error.WriteLine("Only IPv4 is supported for --advertise and --bind.");
+                return 1;
+            }
+            if (opts.Duration <= 0)
+            {
+                Console.Error.WriteLine("Invalid --duration. Must be a positive integer (minutes).");
+                return 1;
             }
 
+            Console.Write($"Starting WPAD Responder\n");
+            Console.WriteLine($"  Bind:       {bind}");
+            Console.WriteLine($"  Advertise:  {advertised}");
+            Console.WriteLine($"  Duration:   {opts.Duration} minute(s)");
+            Console.WriteLine();
+
+            var mdns = new MdnsSniffer(advertised, bind, opts.Duration);
+            var llmnr = new LLMNRSniffer(advertised, bind, opts.Duration);
+
+            try
+            {
+                Task.WaitAll(
+                    mdns.RunAsync(),
+                    llmnr.RunAsync()
+                );
+            }
+            catch (AggregateException ae)
+            {
+                foreach (var ex in ae.InnerExceptions)
+                    Console.Error.WriteLine("Error: " + ex.Message);
+                return 1;
+            }
+
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Closing Bind Port and terminating program.");
+            return 0;
         }
     }
+}
