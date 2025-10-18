@@ -2,8 +2,10 @@ This project is to help me become more familiar with C# while focusing on projec
 
 //What currently works
 * Responds to mDNS WPAD traffic
-
+* Responds to LLMNR WPAD traffic
+* Assembly can be loaded into Sliver
+* net48 framework compatible
+  
 //To Do
-* Build LLMNR Protocol
-* Verify Assembly can be loaded into Sliver
-* Verify if NBNS is need or if I can be redirected
+* Add firewall rules capability to prevent UAC pop up
+* Figure out how to redirect STDOUT to sliver cli.
